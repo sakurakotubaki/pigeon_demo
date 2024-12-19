@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:pigeon_demo/api.g.dart';
+import 'dart:math' as math;
 
 void main() {
   runApp(const MyApp());
@@ -7,119 +9,184 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      debugShowCheckedModeBanner: false,
+      title: 'Battery Demo',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        primarySwatch: Colors.blue,
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const BatteryPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+class BatteryPainter extends CustomPainter {
+  final double batteryLevel;
+  final Color batteryColor;
+  final double animationValue;
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+  BatteryPainter({
+    required this.batteryLevel,
+    required this.batteryColor,
+    required this.animationValue,
+  });
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.grey[300]!
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0;
+
+    // バッテリー本体の描画
+    final RRect batteryBody = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, size.height * 0.1, size.width * 0.9, size.height * 0.8),
+      Radius.circular(10),
+    );
+    canvas.drawRRect(batteryBody, paint);
+
+    // バッテリー端子の描画
+    final terminalPath = Path()
+      ..addRect(Rect.fromLTWH(
+        size.width * 0.9,
+        size.height * 0.35,
+        size.width * 0.1,
+        size.height * 0.3,
+      ));
+    canvas.drawPath(terminalPath, paint);
+
+    // バッテリー残量の描画
+    final levelPaint = Paint()
+      ..color = batteryColor.withOpacity(0.8)
+      ..style = PaintingStyle.fill;
+
+    final levelWidth = (size.width * 0.85) * (batteryLevel / 100) * animationValue;
+    final levelRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(5, size.height * 0.15, levelWidth, size.height * 0.7),
+      Radius.circular(7),
+    );
+    canvas.drawRRect(levelRect, levelPaint);
+
+    // パーセント表示
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: '${(batteryLevel * animationValue).toInt()}%',
+        style: TextStyle(
+          color: Colors.black,
+          fontSize: size.height * 0.3,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(
+        (size.width - textPainter.width) / 2,
+        (size.height - textPainter.height) / 2,
+      ),
+    );
+  }
+
+  @override
+  bool shouldRepaint(BatteryPainter oldDelegate) {
+    return oldDelegate.batteryLevel != batteryLevel ||
+        oldDelegate.animationValue != animationValue;
+  }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class BatteryPage extends StatefulWidget {
+  const BatteryPage({super.key});
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  @override
+  State<BatteryPage> createState() => _BatteryPageState();
+}
+
+class _BatteryPageState extends State<BatteryPage>
+    with SingleTickerProviderStateMixin {
+  final _api = BatteryApi();
+  double _batteryLevel = 0.0;
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    );
+    _animation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
+    );
+    _getBatteryLevel();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _getBatteryLevel() async {
+    try {
+      final batteryLevel = await _api.getBatteryLevel();
+      setState(() {
+        _batteryLevel = batteryLevel.toDouble();
+        _controller.forward(from: 0);
+      });
+    } catch (e) {
+      setState(() {
+        _batteryLevel = 0;
+      });
+    }
+  }
+
+  Color _getBatteryColor(double level) {
+    if (level > 60) return Colors.green;
+    if (level > 20) return Colors.orange;
+    return Colors.red;
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('Battery Level'),
       ),
       body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
           mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+          children: [
+            AnimatedBuilder(
+              animation: _animation,
+              builder: (context, child) {
+                return Container(
+                  width: 200,
+                  height: 100,
+                  child: CustomPaint(
+                    painter: BatteryPainter(
+                      batteryLevel: _batteryLevel,
+                      batteryColor: _getBatteryColor(_batteryLevel),
+                      animationValue: _animation.value,
+                    ),
+                  ),
+                );
+              },
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _getBatteryLevel,
+              child: const Text('更新'),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
