@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:pigeon_demo/api.g.dart';
-import 'dart:math' as math;
 
 void main() {
   runApp(const MyApp());
@@ -60,7 +59,7 @@ class BatteryPainter extends CustomPainter {
 
     // バッテリー残量の描画
     final levelPaint = Paint()
-      ..color = batteryColor.withOpacity(0.8)
+      ..color = batteryColor.withValues(alpha:  0.8)
       ..style = PaintingStyle.fill;
 
     final levelWidth = (size.width * 0.85) * (batteryLevel / 100) * animationValue;
@@ -166,7 +165,7 @@ class _BatteryPageState extends State<BatteryPage>
             AnimatedBuilder(
               animation: _animation,
               builder: (context, child) {
-                return Container(
+                return SizedBox(
                   width: 200,
                   height: 100,
                   child: CustomPaint(
