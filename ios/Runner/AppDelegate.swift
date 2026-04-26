@@ -2,7 +2,7 @@ import UIKit
 import Flutter
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, BatteryApi {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, BatteryApi {
     func getBatteryLevel() -> Int64 {
         UIDevice.current.isBatteryMonitoringEnabled = true
         let batteryLevel = UIDevice.current.batteryLevel
@@ -19,9 +19,11 @@ import Flutter
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
-        let controller = window?.rootViewController as! FlutterViewController
-        BatteryApiSetup.setUp(binaryMessenger: controller.binaryMessenger, api: self)
-        GeneratedPluginRegistrant.register(with: self)
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    }
+
+    func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+        GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+        BatteryApiSetup.setUp(binaryMessenger: engineBridge.applicationRegistrar.messenger(), api: self)
     }
 }
